@@ -1,8 +1,8 @@
 # DETAILS Financials — Netlify Configuration
 
 [build]
-  publish = "public"
-  functions = "netlify/functions"
+  publish = "."
+  functions = "."
 
 # Security headers — applied to all pages
 [[headers]]
