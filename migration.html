@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DETAILS → Supabase Migration Tool</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',sans-serif;background:#0D1F35;color:#fff;min-height:100vh;padding:30px}
+  .container{max-width:860px;margin:0 auto}
+  h1{font-size:22px;color:#2EC4C4;margin-bottom:4px}
+  .sub{font-size:13px;color:rgba(255,255,255,.5);margin-bottom:24px}
+  .card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:20px;margin-bottom:16px}
+  .card h2{font-size:13px;font-weight:700;color:#2EC4C4;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+  label{font-size:11px;color:rgba(255,255,255,.6);display:block;margin-bottom:4px}
+  input,textarea{width:100%;padding:8px 10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:6px;color:#fff;font-size:12px;font-family:monospace}
+  textarea{resize:vertical;min-height:60px}
+  .btn{padding:10px 22px;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;transition:.15s}
+  .btn-primary{background:#2EC4C4;color:#0D1F35}
+  .btn-primary:hover{background:#26a8a8}
+  .btn-primary:disabled{background:#1A5276;color:rgba(255,255,255,.4);cursor:not-allowed}
+  .btn-secondary{background:rgba(255,255,255,.1);color:#fff;margin-right:8px}
+  .log{background:#000;border-radius:8px;padding:14px;font-family:monospace;font-size:11px;line-height:1.8;max-height:400px;overflow-y:auto;margin-top:12px}
+  .log .ok{color:#2EC4C4}
+  .log .err{color:#E74C3C}
+  .log .warn{color:#F39C12}
+  .log .info{color:rgba(255,255,255,.6)}
+  .log .bold{color:#fff;font-weight:700}
+  .progress-wrap{background:rgba(255,255,255,.1);border-radius:4px;height:8px;margin:8px 0}
+  .progress-bar{background:#2EC4C4;height:8px;border-radius:4px;transition:width .3s;width:0%}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
+  .stat{background:rgba(46,196,196,.1);border:1px solid rgba(46,196,196,.2);border-radius:7px;padding:10px;text-align:center}
+  .stat-n{font-size:24px;font-weight:800;color:#2EC4C4}
+  .stat-l{font-size:10px;color:rgba(255,255,255,.5);margin-top:2px;text-transform:uppercase}
+  .step-badge{display:inline-block;background:#1A5276;color:#2EC4C4;border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;margin-right:6px}
+  .warn-box{background:rgba(243,156,18,.1);border:1px solid rgba(243,156,18,.3);border-radius:6px;padding:10px 14px;font-size:12px;color:#F39C12;margin-bottom:12px}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>▲ DETAILS Financials — Migration Tool</h1>
+  <p class="sub">One-click migration from Google Sheets → Supabase PostgreSQL</p>
+
+  <div class="warn-box">
+    ⚠ This tool reads your live Google Sheets data and writes it to Supabase.
+    Your Google Sheets data is NOT modified. Run this once. If you run it again, use the "Clear Supabase" button first to avoid duplicates.
+  </div>
+
+  <!-- Config -->
+  <div class="card">
+    <h2>Configuration</h2>
+    <div class="form-row">
+      <div>
+        <label>Google Apps Script URL</label>
+        <input id="cfg-gas-url" type="text" placeholder="https://script.google.com/macros/s/.../exec">
+      </div>
+      <div>
+        <label>GAS API Key</label>
+        <input id="cfg-gas-key" type="text" placeholder="your-api-key">
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>Supabase Project URL</label>
+        <input id="cfg-sb-url" type="text" value="https://lyxmbvlquvqrwocvjehe.supabase.co">
+      </div>
+      <div>
+        <label>Supabase Service Role Key (full access — keep secret)</label>
+        <input id="cfg-sb-key" type="password" placeholder="eyJ...">
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="btn btn-secondary" onclick="testConnections()">🔌 Test Connections</button>
+      <button class="btn btn-secondary" onclick="previewData()">👁 Preview Data</button>
+    </div>
+  </div>
+
+  <!-- Stats preview -->
+  <div class="card" id="preview-card" style="display:none">
+    <h2>Data Preview (from Google Sheets)</h2>
+    <div class="stats">
+      <div class="stat"><div class="stat-n" id="st-co">—</div><div class="stat-l">Companies</div></div>
+      <div class="stat"><div class="stat-n" id="st-ac">—</div><div class="stat-l">Accounts</div></div>
+      <div class="stat"><div class="stat-n" id="st-tx">—</div><div class="stat-l">Transactions</div></div>
+      <div class="stat"><div class="stat-n" id="st-li">—</div><div class="stat-l">Lines</div></div>
+      <div class="stat"><div class="stat-n" id="st-us">—</div><div class="stat-l">Users</div></div>
+      <div class="stat"><div class="stat-n" id="st-pr">—</div><div class="stat-l">Projects</div></div>
+      <div class="stat"><div class="stat-n" id="st-do">—</div><div class="stat-l">Donors</div></div>
+      <div class="stat"><div class="stat-n" id="st-pa">—</div><div class="stat-l">Parties</div></div>
+    </div>
+  </div>
+
+  <!-- Migration -->
+  <div class="card">
+    <h2>Migration</h2>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="btn-migrate" onclick="runMigration()" disabled>
+        🚀 Start Migration
+      </button>
+      <button class="btn btn-secondary" onclick="clearSupabase()">🗑 Clear Supabase Tables</button>
+      <button class="btn btn-secondary" onclick="verifyMigration()">✓ Verify Migration</button>
+    </div>
+    <div class="progress-wrap" style="margin-top:14px">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    <div id="progress-label" style="font-size:11px;color:rgba(255,255,255,.5);margin-top:4px"></div>
+    <div class="log" id="log"><span class="info">Logs will appear here...</span></div>
+  </div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────
+let GAS_URL = '', GAS_KEY = '', SB_URL = '', SB_KEY = '';
+let rawDB = null; // loaded from GAS
+let idMap = {};   // old string IDs → new UUIDs
+
+function cfg(){
+  GAS_URL = document.getElementById('cfg-gas-url').value.trim();
+  GAS_KEY = document.getElementById('cfg-gas-key').value.trim();
+  SB_URL  = document.getElementById('cfg-sb-url').value.trim().replace(/\/$/, '');
+  SB_KEY  = document.getElementById('cfg-sb-key').value.trim();
+}
+
+// ── Logging ───────────────────────────────────────────────────────
+function log(msg, type='info'){
+  const el = document.getElementById('log');
+  const line = document.createElement('div');
+  line.className = type;
+  line.innerHTML = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog(){ document.getElementById('log').innerHTML = ''; }
+function setProgress(pct, label){
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-label').textContent = label || '';
+}
+
+// ── Supabase REST helpers ─────────────────────────────────────────
+async function sbInsert(table, rows){
+  if(!rows || !rows.length) return {data:[], error:null};
+  // Insert in batches of 100
+  const batchSize = 100;
+  let inserted = 0;
+  for(let i=0; i<rows.length; i+=batchSize){
+    const batch = rows.slice(i, i+batchSize);
+    const r = await fetch(SB_URL+'/rest/v1/'+table, {
+      method:'POST',
+      headers:{
+        'apikey': SB_KEY,
+        'Authorization': 'Bearer '+SB_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(batch)
+    });
+    if(!r.ok){
+      const err = await r.text();
+      throw new Error('Insert '+table+' failed: '+err.slice(0,200));
+    }
+    inserted += batch.length;
+  }
+  return {inserted};
+}
+
+async function sbCount(table){
+  const r = await fetch(SB_URL+'/rest/v1/'+table+'?select=id', {
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Prefer':'count=exact','Range':'0-0'}
+  });
+  return parseInt(r.headers.get('content-range')?.split('/')[1]||'0');
+}
+
+async function sbDelete(table){
+  const r = await fetch(SB_URL+'/rest/v1/'+table+'?id=neq.00000000-0000-0000-0000-000000000000', {
+    method:'DELETE',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+  });
+  return r.ok;
+}
+
+// ── Load data from GAS ────────────────────────────────────────────
+async function loadFromGAS(){
+  const url = GAS_URL + '?action=load&key=' + encodeURIComponent(GAS_KEY);
+  const r = await fetch(url, {redirect:'follow'});
+  if(!r.ok) throw new Error('GAS fetch failed: ' + r.status);
+  const d = await r.json();
+  if(!d.success) throw new Error('GAS error: ' + d.error);
+  return d.db;
+}
+
+// ── UUID generator ───────────────────────────────────────────────
+function uuid(){
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{
+    const r=Math.random()*16|0, v=c==='x'?r:(r&0x3|0x8);
+    return v.toString(16);
+  });
+}
+
+// ── Test connections ──────────────────────────────────────────────
+async function testConnections(){
+  cfg(); clearLog();
+  log('<span class="bold">Testing connections...</span>');
+  // Test GAS
+  try{
+    const url = GAS_URL + '?action=ping&key=' + encodeURIComponent(GAS_KEY);
+    const r = await Promise.race([fetch(url,{redirect:'follow'}), new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),10000))]);
+    const d = await r.json();
+    log('✓ Google Apps Script: Connected ('+d.message+')', 'ok');
+  }catch(e){ log('✗ Google Apps Script: '+e.message, 'err'); return; }
+  // Test Supabase
+  try{
+    const r = await fetch(SB_URL+'/rest/v1/companies?limit=1', {
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+    });
+    if(r.ok){ log('✓ Supabase: Connected (companies table accessible)', 'ok'); }
+    else { log('✗ Supabase: HTTP '+r.status+' — check your service_role key', 'err'); return; }
+  }catch(e){ log('✗ Supabase: '+e.message, 'err'); return; }
+  log('✓ All connections OK — ready to migrate!', 'ok');
+  document.getElementById('btn-migrate').disabled = false;
+}
+
+// ── Preview data ──────────────────────────────────────────────────
+async function previewData(){
+  cfg(); clearLog();
+  log('Loading data from Google Sheets...');
+  try{
+    rawDB = await loadFromGAS();
+    const companies = rawDB.companies||[];
+    let totalAccts=0, totalTx=0, totalLines=0, totalParties=0;
+    companies.forEach(co=>{
+      const cd=rawDB.data?.[co.id]||{};
+      totalAccts += (cd.accounts||[]).length;
+      totalTx += (cd.transactions||[]).length;
+      totalLines += (cd.transactions||[]).reduce((s,t)=>s+(t.lines||[]).length,0);
+      totalParties += (cd.parties||[]).length;
+    });
+    totalAccts += (rawDB.shared?.accounts||[]).length;
+    totalParties += (rawDB.shared?.parties||[]).length;
+    document.getElementById('st-co').textContent = companies.length;
+    document.getElementById('st-ac').textContent = totalAccts;
+    document.getElementById('st-tx').textContent = totalTx;
+    document.getElementById('st-li').textContent = totalLines;
+    document.getElementById('st-us').textContent = (rawDB.users||[]).length;
+    document.getElementById('st-pr').textContent = (rawDB.data?.[companies[0]?.id]?.projects||[]).length || '—';
+    document.getElementById('st-do').textContent = (rawDB.data?.[companies[0]?.id]?.donors||[]).length || '—';
+    document.getElementById('st-pa').textContent = totalParties;
+    document.getElementById('preview-card').style.display = '';
+    log('✓ Data loaded from Google Sheets', 'ok');
+    log('  Companies: '+companies.length+' | Accounts: '+totalAccts+' | Transactions: '+totalTx+' | Lines: '+totalLines, 'bold');
+    document.getElementById('btn-migrate').disabled = false;
+  }catch(e){ log('✗ '+e.message, 'err'); }
+}
+
+// ── MAIN MIGRATION ────────────────────────────────────────────────
+async function runMigration(){
+  cfg(); clearLog(); idMap = {};
+  const btn = document.getElementById('btn-migrate');
+  btn.disabled = true; btn.textContent = '⏳ Migrating...';
+  try{
+    // Step 0 — Load data
+    setProgress(2,'Loading from Google Sheets...');
+    log('<span class="bold">Step 1/9 — Loading data from Google Sheets</span>');
+    if(!rawDB) rawDB = await loadFromGAS();
+    log('✓ Data loaded', 'ok');
+
+    const companies = rawDB.companies||[];
+    const users = rawDB.users||[];
+    const sharedAccounts = rawDB.shared?.accounts||[];
+    const sharedParties = rawDB.shared?.parties||[];
+
+    // ── 1. COMPANIES ──────────────────────────────────────────────
+    setProgress(10,'Migrating companies...');
+    log('<span class="bold">Step 2/9 — Companies</span>');
+    const coRows = companies.map(co=>{
+      const newId = uuid();
+      idMap['co_'+co.id] = newId;
+      return {
+        id: newId,
+        code: co.code||co.id,
+        name: co.name||'Company',
+        country: co.country||'Pakistan',
+        currency: co.currency||'USD',
+        fy_start: co.fyStart||'01-01',
+        is_active: true,
+        is_core: false
+      };
+    });
+    await sbInsert('companies', coRows);
+    log('✓ Inserted '+coRows.length+' companies', 'ok');
+
+    // ── 2. USERS ──────────────────────────────────────────────────
+    setProgress(18,'Migrating users...');
+    log('<span class="bold">Step 3/9 — Users</span>');
+    const userRows = users.map(u=>{
+      const newId = uuid();
+      idMap['usr_'+u.id] = newId;
+      return {
+        id: newId,
+        username: u.username,
+        full_name: u.fullName||u.username,
+        email: u.email||null,
+        password_hash: u.passwordHash||u.password||'',
+        role: u.role||'Viewer',
+        is_active: u.isActive!==false,
+        company_access: null,
+        permissions: u.permissions||{}
+      };
+    });
+    if(userRows.length) await sbInsert('users', userRows);
+    log('✓ Inserted '+userRows.length+' users', 'ok');
+
+    // ── 3. DONORS (global pool first) ────────────────────────────
+    setProgress(26,'Migrating donors...');
+    log('<span class="bold">Step 4/9 — Donors & Projects</span>');
+    const allDonors = [];
+    const seenDonors = new Set();
+    // Collect from all companies
+    companies.forEach(co=>{
+      const cd = rawDB.data?.[co.id]||{};
+      (cd.donors||[]).forEach(d=>{
+        if(!seenDonors.has(d.id)){
+          seenDonors.add(d.id);
+          const newId = uuid();
+          idMap['do_'+d.id] = newId;
+          allDonors.push({
+            id: newId, code: d.code||'D'+allDonors.length,
+            name: d.name||'Donor', country: d.country||null,
+            is_core: d.id==='CORE'||d.isCore===true, is_active: true
+          });
+        }
+      });
+    });
+    // Ensure CORE donor exists
+    if(!idMap['do_CORE']){
+      const coreId = uuid();
+      idMap['do_CORE'] = coreId;
+      allDonors.unshift({id:coreId,code:'CORE',name:'Core (Own Funds)',country:'Internal',is_core:true,is_active:true});
+    }
+    if(allDonors.length) await sbInsert('donors', allDonors);
+    log('✓ Inserted '+allDonors.length+' donors', 'ok');
+
+    // ── 4. PROJECTS ───────────────────────────────────────────────
+    const allProjects = [];
+    const seenProjects = new Set();
+    companies.forEach(co=>{
+      const cd = rawDB.data?.[co.id]||{};
+      (cd.projects||[]).forEach(p=>{
+        if(!seenProjects.has(p.id)){
+          seenProjects.add(p.id);
+          const newId = uuid();
+          idMap['pr_'+p.id] = newId;
+          allProjects.push({
+            id: newId, code: p.code||'P'+allProjects.length,
+            name: p.name||'Project',
+            primary_donor_id: idMap['do_'+(p.donorId||'CORE')]||null,
+            status: p.status||'ACTIVE',
+            description: p.desc||null,
+            budget_total: parseFloat(p.budget?.total||0)||0,
+            budget_from: p.budget?.from||null,
+            budget_to: p.budget?.to||null,
+            budget_lines: p.budget?.lines||{},
+            is_core: p.id==='CORE'||p.isCore===true, is_active: true
+          });
+        }
+      });
+    });
+    // Ensure CORE project
+    if(!idMap['pr_CORE']){
+      const coreId = uuid();
+      idMap['pr_CORE'] = coreId;
+      allProjects.unshift({id:coreId,code:'CORE',name:'Core (Own Sources)',primary_donor_id:idMap['do_CORE']||null,status:'ACTIVE',description:'Unallocated',budget_total:0,budget_lines:{},is_core:true,is_active:true});
+    }
+    if(allProjects.length) await sbInsert('projects', allProjects);
+    log('✓ Inserted '+allProjects.length+' projects', 'ok');
+
+    // Company ↔ Donor / Project links
+    const coDoLinks=[], coPrLinks=[];
+    companies.forEach(co=>{
+      const coNewId = idMap['co_'+co.id];
+      const cd = rawDB.data?.[co.id]||{};
+      (cd.donors||[]).forEach(d=>{ if(idMap['do_'+d.id]) coDoLinks.push({company_id:coNewId,donor_id:idMap['do_'+d.id]}); });
+      (cd.projects||[]).forEach(p=>{ if(idMap['pr_'+p.id]) coPrLinks.push({company_id:coNewId,project_id:idMap['pr_'+p.id]}); });
+    });
+    if(coDoLinks.length) await sbInsert('company_donors', coDoLinks);
+    if(coPrLinks.length) await sbInsert('company_projects', coPrLinks);
+    log('✓ Company-donor and company-project links created', 'ok');
+
+    // ── 5. ACCOUNTS ───────────────────────────────────────────────
+    setProgress(40,'Migrating accounts...');
+    log('<span class="bold">Step 5/9 — Chart of Accounts</span>');
+    // Two passes: first create all accounts without parent_id, then update parents
+    const allAccounts = [];
+    const acctParentMap = {}; // newId → oldParentId
+
+    // Shared accounts
+    sharedAccounts.forEach(a=>{
+      const newId = uuid();
+      idMap['ac_'+a.id] = newId;
+      if(a.parentId) acctParentMap[newId] = a.parentId;
+      allAccounts.push({
+        id:newId, company_id:null, code:a.code, name:a.name,
+        class:a.cls||'EXPENSE', cf_category:a.cf||'OPERATING',
+        parent_id:null, description:a.desc||null, is_shared:true, is_active:true
+      });
+    });
+
+    companies.forEach(co=>{
+      const coNewId = idMap['co_'+co.id];
+      const cd = rawDB.data?.[co.id]||{};
+      (cd.accounts||[]).forEach(a=>{
+        if(idMap['ac_'+a.id]) return; // already added from shared
+        const newId = uuid();
+        idMap['ac_'+a.id] = newId;
+        if(a.parentId) acctParentMap[newId] = a.parentId;
+        allAccounts.push({
+          id:newId, company_id:coNewId, code:a.code, name:a.name,
+          class:a.cls||'EXPENSE', cf_category:a.cf||'OPERATING',
+          parent_id:null, description:a.desc||null, is_shared:false, is_active:true
+        });
+      });
+    });
+
+    // Resolve parent IDs
+    allAccounts.forEach(a=>{ if(acctParentMap[a.id]) a.parent_id = idMap['ac_'+acctParentMap[a.id]]||null; });
+    if(allAccounts.length) await sbInsert('accounts', allAccounts);
+    log('✓ Inserted '+allAccounts.length+' accounts', 'ok');
+
+    // ── 6. PARTIES ────────────────────────────────────────────────
+    setProgress(52,'Migrating parties...');
+    log('<span class="bold">Step 6/9 — Parties / Contacts</span>');
+    const allParties = [];
+    sharedParties.forEach(p=>{
+      const newId = uuid();
+      idMap['par_'+p.id] = newId;
+      allParties.push({id:newId,company_id:null,code:p.code||null,name:p.name,type:p.type||'Other',contact:p.contact||null,is_shared:true,is_active:true});
+    });
+    companies.forEach(co=>{
+      const coNewId = idMap['co_'+co.id];
+      const cd = rawDB.data?.[co.id]||{};
+      (cd.parties||[]).forEach(p=>{
+        if(idMap['par_'+p.id]) return;
+        const newId = uuid();
+        idMap['par_'+p.id] = newId;
+        allParties.push({id:newId,company_id:coNewId,code:p.code||null,name:p.name,type:p.type||'Other',contact:p.contact||null,is_shared:false,is_active:true});
+      });
+    });
+    if(allParties.length) await sbInsert('parties', allParties);
+    log('✓ Inserted '+allParties.length+' parties', 'ok');
+
+    // ── 7. PERIODS ────────────────────────────────────────────────
+    setProgress(62,'Migrating periods...');
+    log('<span class="bold">Step 7/9 — Periods</span>');
+    const allPeriods = [];
+    companies.forEach(co=>{
+      const coNewId = idMap['co_'+co.id];
+      const cd = rawDB.data?.[co.id]||{};
+      (cd.periods||[]).forEach(p=>{
+        const newId = uuid();
+        idMap['per_'+p.id] = newId;
+        allPeriods.push({
+          id:newId, company_id:coNewId, name:p.name||'Period',
+          date_from:p.from||'2025-01-01', date_to:p.to||'2025-12-31',
+          status:p.status||'OPEN',
+          closed_at:p.closedAt||null, closed_by:null
+        });
+      });
+    });
+    if(allPeriods.length) await sbInsert('periods', allPeriods);
+    log('✓ Inserted '+allPeriods.length+' periods', 'ok');
+
+    // ── 8. TRANSACTIONS + LINES + ALLOCATIONS ────────────────────
+    setProgress(70,'Migrating transactions...');
+    log('<span class="bold">Step 8/9 — Transactions & Journal Lines</span>');
+    let txTotal=0, lineTotal=0, allocTotal=0;
+
+    for(const co of companies){
+      const coNewId = idMap['co_'+co.id];
+      const cd = rawDB.data?.[co.id]||{};
+      const txns = cd.transactions||[];
+      log('  Processing company: '+co.name+' ('+txns.length+' transactions)', 'info');
+
+      // Build rows in batches
+      const txRows=[], lineRows=[], allocRows=[];
+      txns.forEach(tx=>{
+        const newTxId = uuid();
+        idMap['tx_'+tx.id] = newTxId;
+        txRows.push({
+          id:newTxId, company_id:coNewId,
+          date:tx.date||'2025-01-01',
+          ref:tx.ref||'TX',
+          narration:tx.narration||'',
+          voucher_type:tx.voucherType||'JV',
+          ext_ref:tx.extref||null,
+          project_id:idMap['pr_'+(tx.projectId||'CORE')]||idMap['pr_CORE'],
+          donor_id:idMap['do_'+(tx.donorId||'CORE')]||idMap['do_CORE'],
+          party_id:tx.partyId?idMap['par_'+tx.partyId]||null:null,
+          period_id:null, is_deleted:false, created_by:null
+        });
+
+        (tx.lines||[]).forEach((ln,idx)=>{
+          const acctNewId = idMap['ac_'+ln.acct];
+          if(!acctNewId){ return; } // skip lines with unknown account
+          lineRows.push({
+            id:uuid(), transaction_id:newTxId,
+            account_id:acctNewId,
+            debit:parseFloat(ln.dr)||0,
+            credit:parseFloat(ln.cr)||0,
+            description:ln.desc||null,
+            line_ref:ln.lineref||null,
+            project_id:ln.projId?idMap['pr_'+ln.projId]||idMap['pr_CORE']:idMap['pr_CORE'],
+            donor_id:ln.donorId?idMap['do_'+ln.donorId]||idMap['do_CORE']:idMap['do_CORE'],
+            party_id:ln.partyId?idMap['par_'+ln.partyId]||null:null,
+            sort_order:idx
+          });
+        });
+
+        (tx.allocations||[]).forEach(al=>{
+          if(!al.projId||!al.pct) return;
+          allocRows.push({
+            id:uuid(), transaction_id:newTxId,
+            project_id:idMap['pr_'+al.projId]||idMap['pr_CORE'],
+            percentage:parseFloat(al.pct)||0,
+            is_auto_core:al.isAuto||false
+          });
+        });
+      });
+
+      if(txRows.length) await sbInsert('transactions', txRows);
+      if(lineRows.length) await sbInsert('transaction_lines', lineRows);
+      if(allocRows.length) await sbInsert('allocations', allocRows);
+      txTotal+=txRows.length; lineTotal+=lineRows.length; allocTotal+=allocRows.length;
+      setProgress(70 + Math.round(companies.indexOf(co)/companies.length*20), 'Migrating '+co.name+'...');
+    }
+    log('✓ Transactions: '+txTotal+' | Lines: '+lineTotal+' | Allocations: '+allocTotal, 'ok');
+
+    // ── 9. AUDIT LOG ─────────────────────────────────────────────
+    setProgress(92,'Migrating audit log...');
+    log('<span class="bold">Step 9/9 — Audit Log</span>');
+    const auditRows = (rawDB.auditLog||[]).slice(-500).map(a=>({ // last 500 entries
+      id:uuid(), user_id:null, username:a.user||'system',
+      action:['create','update','delete','login','logout','system'].includes(a.action)?a.action:'system',
+      table_name:a.module||null, record_id:null,
+      description:a.description||a.action, before_data:null,
+      after_data:a.details?a.details:null,
+      created_at:a.timestamp||new Date().toISOString()
+    }));
+    if(auditRows.length) await sbInsert('audit_log', auditRows);
+    log('✓ Inserted '+auditRows.length+' audit log entries', 'ok');
+
+    // ── DONE ──────────────────────────────────────────────────────
+    setProgress(100,'Migration complete!');
+    log('', 'info');
+    log('🎉 MIGRATION COMPLETE!', 'bold');
+    log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+    log('  Companies:    '+coRows.length, 'ok');
+    log('  Users:        '+userRows.length, 'ok');
+    log('  Accounts:     '+allAccounts.length, 'ok');
+    log('  Donors:       '+allDonors.length, 'ok');
+    log('  Projects:     '+allProjects.length, 'ok');
+    log('  Parties:      '+allParties.length, 'ok');
+    log('  Periods:      '+allPeriods.length, 'ok');
+    log('  Transactions: '+txTotal, 'ok');
+    log('  Lines:        '+lineTotal, 'ok');
+    log('  Allocations:  '+allocTotal, 'ok');
+    log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+    log('Next step: Click "Verify Migration" to confirm counts match', 'info');
+
+  }catch(e){
+    log('✗ MIGRATION FAILED: '+e.message, 'err');
+    log('Check your connection settings and try again.', 'warn');
+    setProgress(0,'Failed — see log for details');
+  }
+  btn.disabled = false; btn.textContent = '🚀 Start Migration';
+}
+
+// ── Verify ────────────────────────────────────────────────────────
+async function verifyMigration(){
+  cfg(); clearLog();
+  log('<span class="bold">Verifying migration...</span>');
+  const tables = ['companies','users','accounts','donors','projects','parties','periods','transactions','transaction_lines','allocations','audit_log'];
+  for(const t of tables){
+    try{
+      const n = await sbCount(t);
+      log('✓ '+t.padEnd(20)+': '+n+' rows', n>0?'ok':'warn');
+    }catch(e){ log('✗ '+t+': '+e.message,'err'); }
+  }
+  log('Verification complete.', 'bold');
+}
+
+// ── Clear Supabase ─────────────────────────────────────────────────
+async function clearSupabase(){
+  cfg();
+  if(!confirm('DELETE ALL DATA from Supabase tables? (Your Google Sheets is not affected)\n\nThis cannot be undone.')) return;
+  clearLog();
+  log('Clearing Supabase tables...');
+  // Order matters — delete children before parents
+  const order = ['audit_log','allocations','transaction_lines','transactions','periods','parties','company_projects','company_donors','accounts','projects','donors','users','companies'];
+  for(const t of order){
+    try{ await sbDelete(t); log('✓ Cleared: '+t,'ok'); }
+    catch(e){ log('⚠ '+t+': '+e.message,'warn'); }
+  }
+  log('Done — Supabase is empty. Ready to re-run migration.','bold');
+}
+</script>
+</body>
+</html>
