@@ -3634,9 +3634,17 @@ async function syncToSheets(force){
     const payload = JSON.stringify({
       action:'save', key: syncConfig.apiKey, db: DB, audit: auditLog
     });
-    // Submit via hidden form+iframe — completely bypasses CORS/preflight
-    // Works 100% reliably with Google Apps Script
-    await postViaIframe(syncConfig.url, payload);
+    // Push to Supabase (primary, proper database)
+    const sbPush = fetch('/.netlify/functions/db', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'save', db:DB})
+    }).then(r=>r.json()).then(d=>{
+      if(d.success) console.log('[DETAILS] Saved to Supabase ✓');
+    }).catch(e=>console.warn('[DETAILS] Supabase save failed:',e.message));
+    // Also push to GAS (backup/fallback)
+    const gasPush = postViaIframe(syncConfig.url, payload).catch(e=>null);
+    // Wait for Supabase (primary), don't block on GAS
+    await sbPush;
     setSyncStatus('synced','Saved '+new Date().toLocaleTimeString());
   }catch(err){
     setSyncStatus('error','Save error: '+err.message);
